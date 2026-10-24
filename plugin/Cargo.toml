@@ -1,0 +1,20 @@
+[package]
+name = "metier-skins"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pumpkin-plugin-api = "0.2.0"
+pumpkin-macros = "0.2.0"
+# Manipulation PNG dans le plugin (compile en wasm32-wasip2)
+image = { version = "0.25", default-features = false, features = ["png"] }
+# HTTP vers mineskin.org
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"

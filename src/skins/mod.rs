@@ -69,8 +69,7 @@ pub fn extract_skin_url(skin: &PlayerSkin) -> Result<String, String> {
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(&skin.value)
         .map_err(|e| e.to_string())?;
-    let json: serde_json::Value =
-        serde_json::from_slice(&decoded).map_err(|e| e.to_string())?;
+    let json: serde_json::Value = serde_json::from_slice(&decoded).map_err(|e| e.to_string())?;
     json.pointer("/textures/SKIN/url")
         .and_then(serde_json::Value::as_str)
         .map(String::from)

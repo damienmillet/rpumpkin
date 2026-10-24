@@ -17,11 +17,11 @@ use pumpkin_plugin_api::command::{
 use pumpkin_plugin_api::commands::CommandHandler;
 use pumpkin_plugin_api::events::player::PlayerChatEvent;
 use pumpkin_plugin_api::events::{EventHandler, EventPriority};
-use pumpkin_plugin_api::ItemStack;
 use pumpkin_plugin_api::permission::{Permission, PermissionDefault};
 use pumpkin_plugin_api::permissions::{FS_READ_DATA, FS_WRITE_DATA};
 use pumpkin_plugin_api::text::TextComponent;
 use pumpkin_plugin_api::wit::pumpkin::plugin::data_components::DataComponent;
+use pumpkin_plugin_api::ItemStack;
 use pumpkin_plugin_api::{register_plugin, Context, Plugin, PluginMetadata, Server};
 
 /// Fiche de personnage d'un joueur.
@@ -171,7 +171,10 @@ impl CommandHandler for RollHandler {
         let faces = faces.clamp(2, 1000);
         let result = pseudo_random(1, faces);
         let name = sender.get_name();
-        let message = format!("&e{} &7lance un dé à &e{}&7 faces : &6{}", name, faces, result);
+        let message = format!(
+            "&e{} &7lance un dé à &e{}&7 faces : &6{}",
+            name, faces, result
+        );
         broadcast_message(_server, &message);
         Ok(0)
     }
@@ -189,7 +192,7 @@ fn pseudo_random(min: u32, max: u32) -> u32 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as u32)
         .unwrap_or(0);
-    min + (u32::try_from(t.wrapping_mul(2654435761).wrapping_add(ticks)).unwrap_or(0)) % (max - min + 1)
+    min + t.wrapping_mul(2654435761).wrapping_add(ticks) % (max - min + 1)
 }
 
 fn broadcast_message(server: Server, message: &str) {
@@ -236,10 +239,7 @@ impl CommandHandler for DoHandler {
             )));
         }
         let display = rp_display_name(&sender.get_name());
-        broadcast_message(
-            server,
-            &format!("&7&o[RP] &f{} &7&o: {}", display, action),
-        );
+        broadcast_message(server, &format!("&7&o[RP] &f{} &7&o: {}", display, action));
         Ok(0)
     }
 }
@@ -362,9 +362,10 @@ impl CommandHandler for MetierHandler {
                 .map(|(m, _)| *m)
                 .collect::<Vec<_>>()
                 .join(", ");
-            return Err(CommandError::CommandFailed(TextComponent::text(&
-                format!("Métier inconnu. Métiers disponibles : {}", known),
-            )));
+            return Err(CommandError::CommandFailed(TextComponent::text(&format!(
+                "Métier inconnu. Métiers disponibles : {}",
+                known
+            ))));
         };
 
         let (data_folder, outfit_png) = with_state(|s| {
@@ -597,11 +598,8 @@ impl Plugin for RPumpkin {
                     ),
                 )
                 .then(
-                    CommandNode::argument(
-                        "joueur",
-                        &ArgumentType::String(StringType::SingleWord),
-                    )
-                    .execute(FicheShowHandler),
+                    CommandNode::argument("joueur", &ArgumentType::String(StringType::SingleWord))
+                        .execute(FicheShowHandler),
                 )
                 .execute(FicheShowHandler);
             context.register_command(fiche, "rpumpkin.command.fiche");
@@ -639,9 +637,8 @@ impl Plugin for RPumpkin {
             );
             context.register_command(hrp, "rpumpkin.command.rp");
 
-            let rp = Command::new(&["rp".to_string()], "Activer/désactiver le mode RP").then(
-                CommandNode::argument("etat", &ArgumentType::Bool).execute(RpModeHandler),
-            );
+            let rp = Command::new(&["rp".to_string()], "Activer/désactiver le mode RP")
+                .then(CommandNode::argument("etat", &ArgumentType::Bool).execute(RpModeHandler));
             context.register_command(rp, "rpumpkin.command.rp");
         }
 

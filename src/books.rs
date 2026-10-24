@@ -84,11 +84,7 @@ fn parse_book(content: &str) -> Option<Book> {
 
 /// Liste des ids de livres disponibles, separees par des virgules.
 pub fn list_ids(books: &std::collections::BTreeMap<String, Book>) -> String {
-    books
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(", ")
+    books.keys().cloned().collect::<Vec<_>>().join(", ")
 }
 
 /// Genere le contenu du data component `minecraft:written_book_content`

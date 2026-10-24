@@ -30,11 +30,7 @@ pub const FEATURES: &[(&str, &str, bool)] = &[
         "Commandes RolePlay (/roll, /me, /do, /hrp, /rp)",
         true,
     ),
-    (
-        FEATURE_METIER,
-        "Tenues de metier (/metier)",
-        true,
-    ),
+    (FEATURE_METIER, "Tenues de metier (/metier)", true),
     (
         FEATURE_BOOKS,
         "Livres configurables cote serveur (/livre)",
@@ -92,7 +88,10 @@ impl Config {
             features.insert((*id).to_string(), enabled.into());
         }
         let mut root = serde_json::Map::new();
-        root.insert("fonctionnalites".into(), serde_json::Value::Object(features));
+        root.insert(
+            "fonctionnalites".into(),
+            serde_json::Value::Object(features),
+        );
         serde_json::Value::Object(root).to_string()
     }
 }

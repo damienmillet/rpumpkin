@@ -4,6 +4,8 @@
 //! des commandes RolePlay (/roll, /me, /do, /hrp, /fiche) et des tenues
 //! de métier avec conservation de la tête du joueur (/metier).
 
+pub mod books;
+pub mod config;
 pub mod skins;
 
 use std::collections::HashMap;
@@ -15,9 +17,11 @@ use pumpkin_plugin_api::command::{
 use pumpkin_plugin_api::commands::CommandHandler;
 use pumpkin_plugin_api::events::player::PlayerChatEvent;
 use pumpkin_plugin_api::events::{EventHandler, EventPriority};
+use pumpkin_plugin_api::ItemStack;
 use pumpkin_plugin_api::permission::{Permission, PermissionDefault};
 use pumpkin_plugin_api::permissions::{FS_READ_DATA, FS_WRITE_DATA};
 use pumpkin_plugin_api::text::TextComponent;
+use pumpkin_plugin_api::wit::pumpkin::plugin::data_components::DataComponent;
 use pumpkin_plugin_api::{register_plugin, Context, Plugin, PluginMetadata, Server};
 
 /// Fiche de personnage d'un joueur.
@@ -39,6 +43,10 @@ struct State {
     sheets: HashMap<String, CharacterSheet>,
     /// Chemin du dossier de données persistantes.
     data_folder: String,
+    /// Configuration des fonctionnalités.
+    plugin_config: config::Config,
+    /// Livres chargés depuis `<data_folder>/livres/`.
+    books: std::collections::BTreeMap<String, books::Book>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -46,12 +54,20 @@ static STATE: Mutex<Option<State>> = Mutex::new(None);
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     let mut guard = STATE.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_none() {
+        let plugin_config = config::Config::default();
         *guard = Some(State {
             sheets: HashMap::new(),
             data_folder: String::new(),
+            plugin_config,
+            books: std::collections::BTreeMap::new(),
         });
     }
     f(guard.as_mut().unwrap())
+}
+
+/// Accès en lecture à la configuration des fonctionnalités.
+pub fn with_config<R>(f: impl FnOnce(&config::Config) -> R) -> R {
+    with_state(|s| f(&s.plugin_config))
 }
 
 fn sheet_of(player_name: &str) -> CharacterSheet {
@@ -414,6 +430,86 @@ impl CommandHandler for RpModeHandler {
     }
 }
 
+// --- Livres configurables ---
+
+struct LivreHandler;
+
+impl CommandHandler for LivreHandler {
+    fn handle(
+        &self,
+        sender: CommandSender,
+        _server: Server,
+        args: ConsumedArgs,
+    ) -> Result<i32, CommandError> {
+        let Some(player) = sender.as_player() else {
+            return Err(CommandError::CommandFailed(TextComponent::text(
+                "Cette commande est réservée aux joueurs.",
+            )));
+        };
+        let id = arg_string(&args, "id");
+        let book = with_state(|s| s.books.get(&id).cloned());
+        let Some(book) = book else {
+            let known = with_state(|s| books::list_ids(&s.books));
+            return Err(CommandError::CommandFailed(TextComponent::text(
+                &if known.is_empty() {
+                    "Aucun livre disponible. Placez des fichiers JSON dans plugins/data/rpumpkin/livres/".into()
+                } else {
+                    format!("Livre « {id} » introuvable. Livres disponibles : {known}")
+                },
+            )));
+        };
+
+        let stack = ItemStack::new("minecraft:written_book", 1);
+        stack.set_component(
+            DataComponent::WrittenBookContent,
+            &books::written_book_content(&book),
+        );
+        let title = TextComponent::from_legacy_string(&book.title);
+        stack.set_custom_name(Some(title));
+
+        let inventory = player.get_inventory().as_inventory();
+        let size = inventory.get_size();
+        let mut placed = false;
+        for slot in 0..size {
+            if inventory.get_item(slot).is_none() {
+                inventory.set_item(slot, Some(stack));
+                placed = true;
+                break;
+            }
+        }
+        if !placed {
+            return Err(CommandError::CommandFailed(TextComponent::text(
+                "Inventaire plein. Libérez de la place pour recevoir le livre.",
+            )));
+        }
+        sender.send_message(TextComponent::text(&format!(
+            "Vous avez reçu le livre « {} ».",
+            book.title
+        )));
+        Ok(0)
+    }
+}
+
+struct LivreListHandler;
+
+impl CommandHandler for LivreListHandler {
+    fn handle(
+        &self,
+        sender: CommandSender,
+        _server: Server,
+        _args: ConsumedArgs,
+    ) -> Result<i32, CommandError> {
+        let known = with_state(|s| books::list_ids(&s.books));
+        let message = if known.is_empty() {
+            "Aucun livre disponible.".to_string()
+        } else {
+            format!("Livres disponibles : {known}")
+        };
+        sender.send_message(TextComponent::text(&message));
+        Ok(0)
+    }
+}
+
 // --- Chat RP : formatte les messages des joueurs en mode RP ---
 
 struct ChatHandler;
@@ -462,28 +558,35 @@ impl Plugin for RPumpkin {
 
     fn on_load(&self, context: Context) -> pumpkin_plugin_api::Result<()> {
         let data_folder = context.get_data_folder();
-        with_state(|s| s.data_folder = data_folder);
+        let plugin_config = config::Config::load(&data_folder);
+        let loaded_books = books::load_books(&data_folder);
+        with_state(|s| {
+            s.data_folder = data_folder;
+            s.plugin_config = plugin_config;
+            s.books = loaded_books;
+        });
         load_sheets();
 
-        context.register_event_handler(ChatHandler, EventPriority::Normal, true)?;
+        let chat_enabled = with_config(|c| c.enabled(config::FEATURE_CHAT_RP));
+        if chat_enabled {
+            context.register_event_handler(ChatHandler, EventPriority::Normal, true)?;
+        }
 
-        context.register_permission(&Permission {
-            node: "rpumpkin.command.fiche".into(),
-            description: "Gérer sa fiche de personnage RP".into(),
-            default: PermissionDefault::Allow,
-            children: vec![],
-        })?;
-        context.register_permission(&Permission {
-            node: "rpumpkin.command.rp".into(),
-            description: "Commandes RolePlay (roll, me, do, hrp)".into(),
-            default: PermissionDefault::Allow,
-            children: vec![],
-        })?;
+        if with_config(|c| c.enabled(config::FEATURE_SHEETS)) {
+            context.register_permission(&Permission {
+                node: "rpumpkin.command.fiche".into(),
+                description: "Gérer sa fiche de personnage RP".into(),
+                default: PermissionDefault::Allow,
+                children: vec![],
+            })?;
 
-        let fiche = Command::new(&["fiche".to_string()], "Gérer sa fiche de personnage RP")
-            .then(
-                CommandNode::literal("set").then(
-                    CommandNode::argument("field", &ArgumentType::String(StringType::SingleWord))
+            let fiche = Command::new(&["fiche".to_string()], "Gérer sa fiche de personnage RP")
+                .then(
+                    CommandNode::literal("set").then(
+                        CommandNode::argument(
+                            "field",
+                            &ArgumentType::String(StringType::SingleWord),
+                        )
                         .then(
                             CommandNode::argument(
                                 "value",
@@ -491,63 +594,90 @@ impl Plugin for RPumpkin {
                             )
                             .execute(FicheSetHandler),
                         ),
-                ),
+                    ),
+                )
+                .then(
+                    CommandNode::argument(
+                        "joueur",
+                        &ArgumentType::String(StringType::SingleWord),
+                    )
+                    .execute(FicheShowHandler),
+                )
+                .execute(FicheShowHandler);
+            context.register_command(fiche, "rpumpkin.command.fiche");
+        }
+
+        if with_config(|c| c.enabled(config::FEATURE_RP_COMMANDS)) {
+            context.register_permission(&Permission {
+                node: "rpumpkin.command.rp".into(),
+                description: "Commandes RolePlay (roll, me, do, hrp)".into(),
+                default: PermissionDefault::Allow,
+                children: vec![],
+            })?;
+
+            let roll = Command::new(&["roll".to_string()], "Lancer un dé").then(
+                CommandNode::argument("faces", &ArgumentType::Integer((Some(2), Some(1000))))
+                    .execute(RollHandler),
+            );
+            context.register_command(roll, "rpumpkin.command.rp");
+
+            let me = Command::new(&["me".to_string()], "Décrire une action RP").then(
+                CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
+                    .execute(MeHandler),
+            );
+            context.register_command(me, "rpumpkin.command.rp");
+
+            let do_cmd = Command::new(&["do".to_string()], "Décrire un événement RP").then(
+                CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
+                    .execute(DoHandler),
+            );
+            context.register_command(do_cmd, "rpumpkin.command.rp");
+
+            let hrp = Command::new(&["hrp".to_string()], "Message hors-RP").then(
+                CommandNode::argument("message", &ArgumentType::String(StringType::Greedy))
+                    .execute(HrpHandler),
+            );
+            context.register_command(hrp, "rpumpkin.command.rp");
+
+            let rp = Command::new(&["rp".to_string()], "Activer/désactiver le mode RP").then(
+                CommandNode::argument("etat", &ArgumentType::Bool).execute(RpModeHandler),
+            );
+            context.register_command(rp, "rpumpkin.command.rp");
+        }
+
+        if with_config(|c| c.enabled(config::FEATURE_METIER)) {
+            context.register_permission(&Permission {
+                node: "rpumpkin.command.metier".into(),
+                description: "Choisir sa tenue de métier".into(),
+                default: PermissionDefault::Allow,
+                children: vec![],
+            })?;
+            let metier = Command::new(
+                &["metier".to_string()],
+                "Choisir sa tenue de métier (tête conservée)",
             )
             .then(
-                CommandNode::argument(
-                    "joueur",
-                    &ArgumentType::String(StringType::SingleWord),
+                CommandNode::argument("id", &ArgumentType::String(StringType::SingleWord))
+                    .execute(MetierHandler),
+            );
+            context.register_command(metier, "rpumpkin.command.metier");
+        }
+
+        if with_config(|c| c.enabled(config::FEATURE_BOOKS)) {
+            context.register_permission(&Permission {
+                node: "rpumpkin.command.livre".into(),
+                description: "Recevoir un livre configurable côté serveur".into(),
+                default: PermissionDefault::Allow,
+                children: vec![],
+            })?;
+            let livre = Command::new(&["livre".to_string()], "Recevoir un livre serveur")
+                .then(
+                    CommandNode::argument("id", &ArgumentType::String(StringType::SingleWord))
+                        .execute(LivreHandler),
                 )
-                .execute(FicheShowHandler),
-            )
-            .execute(FicheShowHandler);
-        context.register_command(fiche, "rpumpkin.command.fiche");
-
-        let roll = Command::new(&["roll".to_string()], "Lancer un dé").then(
-            CommandNode::argument("faces", &ArgumentType::Integer((Some(2), Some(1000))))
-                .execute(RollHandler),
-        );
-        context.register_command(roll, "rpumpkin.command.rp");
-
-        let me = Command::new(&["me".to_string()], "Décrire une action RP").then(
-            CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
-                .execute(MeHandler),
-        );
-        context.register_command(me, "rpumpkin.command.rp");
-
-        let do_cmd = Command::new(&["do".to_string()], "Décrire un événement RP").then(
-            CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
-                .execute(DoHandler),
-        );
-        context.register_command(do_cmd, "rpumpkin.command.rp");
-
-        let hrp = Command::new(&["hrp".to_string()], "Message hors-RP").then(
-            CommandNode::argument("message", &ArgumentType::String(StringType::Greedy))
-                .execute(HrpHandler),
-        );
-        context.register_command(hrp, "rpumpkin.command.rp");
-
-        let rp = Command::new(&["rp".to_string()], "Activer/désactiver le mode RP").then(
-            CommandNode::argument("etat", &ArgumentType::Bool)
-                .execute(RpModeHandler),
-        );
-        context.register_command(rp, "rpumpkin.command.rp");
-
-        context.register_permission(&Permission {
-            node: "rpumpkin.command.metier".into(),
-            description: "Choisir sa tenue de métier".into(),
-            default: PermissionDefault::Allow,
-            children: vec![],
-        })?;
-        let metier = Command::new(
-            &["metier".to_string()],
-            "Choisir sa tenue de métier (tête conservée)",
-        )
-        .then(
-            CommandNode::argument("id", &ArgumentType::String(StringType::SingleWord))
-                .execute(MetierHandler),
-        );
-        context.register_command(metier, "rpumpkin.command.metier");
+                .execute(LivreListHandler);
+            context.register_command(livre, "rpumpkin.command.livre");
+        }
 
         Ok(())
     }

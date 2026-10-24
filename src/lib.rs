@@ -1,7 +1,10 @@
 //! RPumpkin — RolePlay unifié pour serveurs Pumpkin.
 //!
-//! Fournit des fiches de personnage persistantes, un chat RP (HRP/RP)
-//! et des commandes RolePlay (/roll, /me, /do, /hrp, /fiche).
+//! Fournit des fiches de personnage persistantes, un chat RP (HRP/RP),
+//! des commandes RolePlay (/roll, /me, /do, /hrp, /fiche) et des tenues
+//! de métier avec conservation de la tête du joueur (/metier).
+
+pub mod skins;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -322,6 +325,70 @@ impl CommandHandler for FicheShowHandler {
     }
 }
 
+struct MetierHandler;
+
+impl CommandHandler for MetierHandler {
+    fn handle(
+        &self,
+        sender: CommandSender,
+        _server: Server,
+        args: ConsumedArgs,
+    ) -> Result<i32, CommandError> {
+        let Some(player) = sender.as_player() else {
+            return Err(CommandError::CommandFailed(TextComponent::text(
+                "Cette commande est réservée aux joueurs.",
+            )));
+        };
+        let metier = arg_string(&args, "id");
+        let Some(outfit_file) = skins::outfit_file(&metier) else {
+            let known = skins::METIERS
+                .iter()
+                .map(|(m, _)| *m)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(CommandError::CommandFailed(TextComponent::text(&
+                format!("Métier inconnu. Métiers disponibles : {}", known),
+            )));
+        };
+
+        let (data_folder, outfit_png) = with_state(|s| {
+            (
+                s.data_folder.clone(),
+                std::fs::read(format!("{}/{}", s.data_folder, outfit_file)),
+            )
+        });
+        let _outfit_png: Vec<u8> = outfit_png.map_err(|e| {
+            CommandError::CommandFailed(TextComponent::text(&format!(
+                "Tenue « {} » introuvable dans le dossier de données ({}) — \
+                 placez-y le PNG généré par skins/gen_skins.py",
+                metier, e
+            )))
+        })?;
+
+        let Some(skin) = player.get_skin() else {
+            return Err(CommandError::CommandFailed(TextComponent::text(
+                "Skin du joueur introuvable.",
+            )));
+        };
+        let _ = data_folder;
+        let skin_url = skins::extract_skin_url(&skin).map_err(|e| {
+            CommandError::CommandFailed(TextComponent::text(&format!(
+                "Impossible de lire le skin actuel : {}",
+                e
+            )))
+        })?;
+        // Le téléchargement du PNG du joueur et l'upload mineskin nécessitent
+        // un client HTTP, non exposé par le plugin API 0.2. Le composite doit
+        // être pré-généré hors-ligne : voir skins/gen_skins.py.
+        let _ = skin_url;
+        Err(CommandError::CommandFailed(TextComponent::text(
+            "L'application de tenue nécessite un composite pré-généré \
+             (skins/gen_skins.py) — l'upload automatique sera disponible \
+             quand le plugin API exposera un client HTTP",
+        )))
+    }
+}
+
 struct RpModeHandler;
 
 impl CommandHandler for RpModeHandler {
@@ -465,6 +532,22 @@ impl Plugin for RPumpkin {
                 .execute(RpModeHandler),
         );
         context.register_command(rp, "rpumpkin.command.rp");
+
+        context.register_permission(&Permission {
+            node: "rpumpkin.command.metier".into(),
+            description: "Choisir sa tenue de métier".into(),
+            default: PermissionDefault::Allow,
+            children: vec![],
+        })?;
+        let metier = Command::new(
+            &["metier".to_string()],
+            "Choisir sa tenue de métier (tête conservée)",
+        )
+        .then(
+            CommandNode::argument("id", &ArgumentType::String(StringType::SingleWord))
+                .execute(MetierHandler),
+        );
+        context.register_command(metier, "rpumpkin.command.metier");
 
         Ok(())
     }

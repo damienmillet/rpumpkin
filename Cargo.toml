@@ -1,0 +1,17 @@
+[package]
+name = "rpumpkin"
+version = "0.1.0"
+edition = "2021"
+description = "Solution unifiée pour ajouter des notions de RolePlay Minecraft dans un serveur Pumpkin"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+pumpkin-plugin-api = "0.2.0"
+serde_json = "1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = true

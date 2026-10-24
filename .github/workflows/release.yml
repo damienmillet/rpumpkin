@@ -36,10 +36,8 @@ jobs:
           generate_release_notes: true
 
       - name: Publier sur le Pumpkin Market
-        uses: filiphsps/pumpkin-plugins/actions/publish-to-pumpkin-market@publish-to-pumpkin-market-v0.0.7
-        with:
-          plugin-name: rpumpkin
-          version: ${{ steps.version.outputs.version }}
-          wasm-file: target/wasm32-wasip2/release/rpumpkin.wasm
-          api-token: ${{ secrets.PUMPKIN_MARKET_TOKEN }}
-          track: alpha
+        run: |
+          curl --fail-with-body -sS -X PUT "https://market.pumpkinmc.org/api/plugins/157" \
+            -H "Authorization: Bearer ${{ secrets.PUMPKIN_MARKET_TOKEN }}" \
+            -F "wasm=@target/wasm32-wasip2/release/rpumpkin.wasm;type=application/wasm" \
+            -F "metadata={\"version\":\"${{ steps.version.outputs.version }}\",\"track\":\"alpha\"}"

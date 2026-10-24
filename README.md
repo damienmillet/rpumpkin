@@ -25,20 +25,31 @@ Un changement en pleine session n'est visible que par les joueurs qui se connect
 
 - `plugin/` — extension Rust (WASM, cible `wasm32-wasip2`), scaffolding à ajuster
   aux signatures exactes de `pumpkin-plugin-api` pour ta version de Pumpkin ;
-- `skins/metier_fermier.png`, `skins/metier_mineur.png` — tenues de test 64×64,
-  zone tête transparente (régénérables via `skins/gen_skins.py`) ;
-- `skins/gen_skins.py` — générateur de tenues (stdlib Python uniquement).
+- `skins/gen_skins.py` — générateur de tenues (stdlib Python uniquement) ;
+- `skins/metier_fermier.png.b64`, `skins/metier_mineur.png.b64` — tenues de test
+  64×64 (zone tête transparente), encodées en base64.
 
-## Build
+## Tenues de test
+
+Les tenues ont la tête **transparente** : après composite, la tête affichée est celle du
+joueur. Deux métiers : `fermier` (salopette denim + chemise) et `mineur` (gilet orange
+de sécurité + bandes réfléchissantes).
+
+Pour obtenir les PNG :
+
+```bash
+# soit via le générateur (recommandé, reproductible)
+python3 skins/gen_skins.py
+
+# soit en décodant les .b64
+base64 -d skins/metier_fermier.png.b64 > skins/metier_fermier.png
+base64 -d skins/metier_mineur.png.b64 > skins/metier_mineur.png
+```
+
+## Build du plugin
 
 ```bash
 rustup target add wasm32-wasip2
 cd plugin && cargo build --target wasm32-wasip2 --release
 # placer le .wasm dans le dossier plugins du serveur Pumpkin
 ```
-
-## Tenues de test
-
-Les PNG de tenue ont la tête **transparente** : après composite, la tête affichée est
-celle du joueur. Deux métiers fournis : `fermier` (salopette denim + chemise) et
-`mineur` (gilet orange de sécurité + bandes réfléchissantes).

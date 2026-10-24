@@ -22,6 +22,13 @@ Les fiches sont persistées dans `plugins/data/rpumpkin/sheets.json` et recharg�
 - `/hrp <message>` — message Hors-RP, clairement balisé
 - `/rp [true|false]` — active/désactive le mode RP (bascule si sans argument)
 
+### Tenues de métier
+- `/metier <fermier|mineur>` — applique la tenue du métier en conservant la tête du joueur
+
+Le skin Minecraft étant une texture unique 64x64, la tenue est un composite : tête du joueur + corps de la tenue. Les tenues sont générées par `skins/gen_skins.py` (PNG 64x64, zone tête transparente) et doivent être placées dans le dossier de données du plugin (`plugins/data/rpumpkin/tenues/`).
+
+**Contrainte API** : le plugin API 0.2 n'expose pas de client HTTP, l'upload automatique mineskin.org n'est donc pas possible depuis le plugin. Les composites doivent être pré-générés. L'application automatique (téléchargement du skin joueur + upload mineskin) sera activée quand l'API exposera un client HTTP.
+
 ### Chat RP
 Quand le mode RP est activé, les messages de chat du joueur sont automatiquement formatés `[RP] <NomRP> : message`, en utilisant le nom de la fiche plutôt que le pseudo Minecraft.
 
@@ -31,6 +38,7 @@ Quand le mode RP est activé, les messages de chat du joueur sont automatiquemen
 |------|-------------|--------|
 | `rpumpkin.command.fiche` | Gérer sa fiche de personnage | Autorisé |
 | `rpumpkin.command.rp` | Commandes RolePlay (roll, me, do, hrp) | Autorisé |
+| `rpumpkin.command.metier` | Choisir sa tenue de métier | Autorisé |
 
 Le plugin demande aussi les permissions d'accès à son dossier de données (`fs.read.data`, `fs.write.data`).
 
@@ -50,7 +58,10 @@ Le fichier `target/wasm32-wasip2/release/rpumpkin.wasm` est à placer dans le do
 ```
 ├── .cargo/config.toml   # cible de build wasm32-wasip2
 ├── Cargo.toml
-└── src/lib.rs            # plugin complet
+├── skins/               # générateur de tenues + tenues de test (b64)
+└── src/
+    ├── lib.rs           # plugin complet
+    └── skins/           # module tenues de métier (composite tête/corps)
 ```
 
 ## Roadmap

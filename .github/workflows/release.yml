@@ -42,4 +42,4 @@ jobs:
           version: ${{ steps.version.outputs.version }}
           wasm-file: target/wasm32-wasip2/release/rpumpkin.wasm
           api-token: ${{ secrets.PUMPKIN_MARKET_TOKEN }}
-          track: stable
+          track: alpha

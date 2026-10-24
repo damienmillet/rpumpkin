@@ -95,6 +95,32 @@ Une fonctionnalité désactivée n'enregistre ni ses commandes, ni ses permissio
 
 Le plugin demande aussi les permissions d'accès à son dossier de données (`fs.read.data`, `fs.write.data`).
 
+## Compatibilité plateforme
+
+Le plugin est compilé en WebAssembly (`wasm32-wasip2`) : un unique `rpumpkin.wasm` fonctionne sur toutes les architectures supportées par le serveur Pumpkin — x86_64, ARM64 (Raspberry Pi 5, Apple Silicon). Aucun build spécifique n'est nécessaire pour le Pi 5 ; seule le binaire du serveur Pumpkin doit être la version `aarch64`.
+
+## CI / Release GitHub
+
+- `.github/workflows/ci.yml` — à chaque push/PR : `cargo fmt --check`, `cargo clippy -D warnings`, build WASM.
+- `.github/workflows/release.yml` — sur un tag `vX.Y.Z` : build, création d'une release GitHub avec `rpumpkin.wasm` en pièce jointe, puis publication sur le Pumpkin Market.
+
+Pour publier une nouvelle version :
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+### Publication sur le Pumpkin Market
+
+La publication Market est faite par l'action `publish-to-pumpkin-market` (depuis [filiphsps/pumpkin-plugins](https://github.com/filiphsps/pumpkin-plugins)). Prérequis :
+
+1. Créer une fiche plugin « rpumpkin » sur [market.pumpkinmc.org](https://market.pumpkinmc.org) (première fois seulement).
+2. Générer un token d'API Market avec les scopes `plugins:update` et `plugins:versions:upload`.
+3. L'ajouter comme secret `PUMPKIN_MARKET_TOKEN` dans `Settings > Secrets and variables > Actions`.
+
+À chaque tag poussé, la version est alors publiée automatiquement sur le Market (track `stable`), en plus de la release GitHub.
+
 ## Build
 
 Prérequis : Rust (via rustup) et la cible WASI :

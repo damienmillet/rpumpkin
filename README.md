@@ -32,6 +32,58 @@ Le skin Minecraft étant une texture unique 64x64, la tenue est un composite : t
 ### Chat RP
 Quand le mode RP est activé, les messages de chat du joueur sont automatiquement formatés `[RP] <NomRP> : message`, en utilisant le nom de la fiche plutôt que le pseudo Minecraft.
 
+### Livres configurables
+- `/livre` — liste les livres disponibles
+- `/livre <id>` — reçoit le livre dans son inventaire (premier slot libre)
+
+Le contenu est défini côté serveur, sans recompilation : chaque fichier JSON déposé dans `plugins/data/rpumpkin/livres/` devient un livre utilisable en jeu. Exemple `plugins/data/rpumpkin/livres/reglement.json` :
+
+```json
+{
+  "titre": "Règlement de la ville",
+  "auteur": "La Mairie",
+  "pages": [
+    "&lRèglement de la ville&\n&7Bienvenue, citoyen !",
+    "&eArticle 1&f : restez courtois envers les autres habitants.",
+    "&eArticle 2&f : le HRP se fait via /hrp."
+  ]
+}
+```
+
+Champs :
+- `titre` (défaut : `Sans titre`) — titre du livre et du nom d'item
+- `auteur` (défaut : `Serveur`) — auteur affiché dans le livre
+- `pages` — liste de chaînes (ou une chaîne unique pour une seule page) ; codes couleur legacy supportés (`&e`, `&l`, `&o`...), `
+` pour un saut de ligne. Un livre Minecraft est limité à 100 pages / 255 caractères par page en jeu.
+
+Les livres sont chargés au démarrage du plugin. L'`id` du livre est le nom du fichier sans extension.
+
+## Configuration des fonctionnalités
+
+Chaque fonctionnalité du plugin (pas le plugin lui-même) peut être activée ou désactivée via `plugins/data/rpumpkin/config.json`, créé automatiquement avec les valeurs par défaut au premier démarrage :
+
+```json
+{
+  "fonctionnalites": {
+    "fiches": true,
+    "chat_rp": true,
+    "commandes_rp": true,
+    "metier": true,
+    "livres": true
+  }
+}
+```
+
+| Clé | Fonctionnalité contrôlée |
+|-----|--------------------------|
+| `fiches` | Fiches de personnage (`/fiche`, persistance `sheets.json`) |
+| `chat_rp` | Formatage RP du chat (handler d'événement) |
+| `commandes_rp` | Commandes `/roll`, `/me`, `/do`, `/hrp`, `/rp` |
+| `metier` | Commande `/metier` et tenues |
+| `livres` | Commande `/livre` et livres serveur |
+
+Une fonctionnalité désactivée n'enregistre ni ses commandes, ni ses permissions, ni ses handlers — elle est totalement absente du serveur jusqu'à réactivation (les données persistées comme `sheets.json` sont conservées). La configuration est lue au démarrage du plugin.
+
 ## Permissions
 
 | Nœud | Description | Défaut |
@@ -39,6 +91,7 @@ Quand le mode RP est activé, les messages de chat du joueur sont automatiquemen
 | `rpumpkin.command.fiche` | Gérer sa fiche de personnage | Autorisé |
 | `rpumpkin.command.rp` | Commandes RolePlay (roll, me, do, hrp) | Autorisé |
 | `rpumpkin.command.metier` | Choisir sa tenue de métier | Autorisé |
+| `rpumpkin.command.livre` | Recevoir un livre serveur | Autorisé |
 
 Le plugin demande aussi les permissions d'accès à son dossier de données (`fs.read.data`, `fs.write.data`).
 
@@ -61,6 +114,8 @@ Le fichier `target/wasm32-wasip2/release/rpumpkin.wasm` est à placer dans le do
 ├── skins/               # générateur de tenues + tenues de test (b64)
 └── src/
     ├── lib.rs           # plugin complet
+    ├── books.rs         # module livres configurables (encodage written_book_content)
+    ├── config.rs        # module configuration des fonctionnalités
     └── skins/           # module tenues de métier (composite tête/corps)
 ```
 

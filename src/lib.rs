@@ -192,8 +192,7 @@ fn pseudo_random(min: u32, max: u32) -> u32 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as u32)
         .unwrap_or(0);
-    min + (u32::try_from(t.wrapping_mul(2654435761).wrapping_add(ticks)).unwrap_or(0))
-        % (max - min + 1)
+    min + t.wrapping_mul(2654435761).wrapping_add(ticks) % (max - min + 1)
 }
 
 fn broadcast_message(server: Server, message: &str) {

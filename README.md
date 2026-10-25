@@ -98,6 +98,10 @@ The plugin also requests permissions to access its data folder (`fs.read.data`, 
 
 The plugin is compiled to WebAssembly (`wasm32-wasip2`): a single `rpumpkin.wasm` runs on every architecture supported by the Pumpkin server — x86_64, ARM64 (Raspberry Pi 5, Apple Silicon). No Pi 5-specific build is needed; only the Pumpkin server binary must be the `aarch64` version.
 
+### Pumpkin server compatibility
+
+The plugin is built against the Pumpkin `0.2.1+26.3-26.51` plugin API (v0.1 WIT ABI). Because the 0.2.1 server changed some v0.1 event records, a plugin built against the old 0.2.0 API no longer loads on a 0.2.1 server (`ApiMismatch`); this build fixes that. Once `pumpkin-plugin-api 0.2.1` is published on crates.io, the git dependency in `Cargo.toml` can be switched back to a version requirement.
+
 ## CI / GitHub Release
 
 - `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build.

@@ -87,10 +87,10 @@ A disabled feature registers neither its commands, nor its permissions, nor its 
 
 | Node | Description | Default |
 |------|-------------|---------|
-| `rpumpkin.command.fiche` | Manage your character sheet | Allowed |
-| `rpumpkin.command.rp` | RolePlay commands (roll, me, do, hrp) | Allowed |
-| `rpumpkin.command.metier` | Choose your job outfit | Allowed |
-| `rpumpkin.command.livre` | Receive a server book | Allowed |
+| `rpumpkin:command.fiche` | Manage your character sheet | Allowed |
+| `rpumpkin:command.rp` | RolePlay commands (roll, me, do, hrp) | Allowed |
+| `rpumpkin:command.metier` | Choose your job outfit | Allowed |
+| `rpumpkin:command.livre` | Receive a server book | Allowed |
 
 The plugin also requests permissions to access its data folder (`fs.read.data`, `fs.write.data`).
 

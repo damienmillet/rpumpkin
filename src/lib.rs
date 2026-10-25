@@ -575,7 +575,7 @@ impl Plugin for RPumpkin {
 
         if with_config(|c| c.enabled(config::FEATURE_SHEETS)) {
             context.register_permission(&Permission {
-                node: "rpumpkin.command.fiche".into(),
+                node: "rpumpkin:command.fiche".into(),
                 description: "Gérer sa fiche de personnage RP".into(),
                 default: PermissionDefault::Allow,
                 children: vec![],
@@ -602,12 +602,12 @@ impl Plugin for RPumpkin {
                         .execute(FicheShowHandler),
                 )
                 .execute(FicheShowHandler);
-            context.register_command(fiche, "rpumpkin.command.fiche");
+            context.register_command(fiche, "rpumpkin:command.fiche");
         }
 
         if with_config(|c| c.enabled(config::FEATURE_RP_COMMANDS)) {
             context.register_permission(&Permission {
-                node: "rpumpkin.command.rp".into(),
+                node: "rpumpkin:command.rp".into(),
                 description: "Commandes RolePlay (roll, me, do, hrp)".into(),
                 default: PermissionDefault::Allow,
                 children: vec![],
@@ -617,34 +617,34 @@ impl Plugin for RPumpkin {
                 CommandNode::argument("faces", &ArgumentType::Integer((Some(2), Some(1000))))
                     .execute(RollHandler),
             );
-            context.register_command(roll, "rpumpkin.command.rp");
+            context.register_command(roll, "rpumpkin:command.rp");
 
             let me = Command::new(&["me".to_string()], "Décrire une action RP").then(
                 CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
                     .execute(MeHandler),
             );
-            context.register_command(me, "rpumpkin.command.rp");
+            context.register_command(me, "rpumpkin:command.rp");
 
             let do_cmd = Command::new(&["do".to_string()], "Décrire un événement RP").then(
                 CommandNode::argument("action", &ArgumentType::String(StringType::Greedy))
                     .execute(DoHandler),
             );
-            context.register_command(do_cmd, "rpumpkin.command.rp");
+            context.register_command(do_cmd, "rpumpkin:command.rp");
 
             let hrp = Command::new(&["hrp".to_string()], "Message hors-RP").then(
                 CommandNode::argument("message", &ArgumentType::String(StringType::Greedy))
                     .execute(HrpHandler),
             );
-            context.register_command(hrp, "rpumpkin.command.rp");
+            context.register_command(hrp, "rpumpkin:command.rp");
 
             let rp = Command::new(&["rp".to_string()], "Activer/désactiver le mode RP")
                 .then(CommandNode::argument("etat", &ArgumentType::Bool).execute(RpModeHandler));
-            context.register_command(rp, "rpumpkin.command.rp");
+            context.register_command(rp, "rpumpkin:command.rp");
         }
 
         if with_config(|c| c.enabled(config::FEATURE_METIER)) {
             context.register_permission(&Permission {
-                node: "rpumpkin.command.metier".into(),
+                node: "rpumpkin:command.metier".into(),
                 description: "Choisir sa tenue de métier".into(),
                 default: PermissionDefault::Allow,
                 children: vec![],
@@ -657,12 +657,12 @@ impl Plugin for RPumpkin {
                 CommandNode::argument("id", &ArgumentType::String(StringType::SingleWord))
                     .execute(MetierHandler),
             );
-            context.register_command(metier, "rpumpkin.command.metier");
+            context.register_command(metier, "rpumpkin:command.metier");
         }
 
         if with_config(|c| c.enabled(config::FEATURE_BOOKS)) {
             context.register_permission(&Permission {
-                node: "rpumpkin.command.livre".into(),
+                node: "rpumpkin:command.livre".into(),
                 description: "Recevoir un livre configurable côté serveur".into(),
                 default: PermissionDefault::Allow,
                 children: vec![],
@@ -673,7 +673,7 @@ impl Plugin for RPumpkin {
                         .execute(LivreHandler),
                 )
                 .execute(LivreListHandler);
-            context.register_command(livre, "rpumpkin.command.livre");
+            context.register_command(livre, "rpumpkin:command.livre");
         }
 
         Ok(())

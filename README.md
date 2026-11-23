@@ -57,6 +57,37 @@ Fields:
 
 Books are loaded when the plugin starts. The book `id` is the file name without extension.
 
+### Nametag line of sight (`sightline`)
+
+Nametags are only visible when the line of sight between the two players' eyes is clear — per viewer (each player has their own scoreboard with a hidden team, `nametag-visibility = never`), the same idea as VisTag on Paper. Transparent blocks (glass, leaves, water...) do not hide nametags; only full opaque cubes do, unless configured otherwise.
+
+- Every `check-interval-ticks`, each pair of players in the same world is re-evaluated (admin toggle, sneak hiding, max distance, optional FOV cone, line of sight) and added to / removed from the viewer's hidden team.
+- **Exact raycast** on block collision shapes (voxel shapes, segment-vs-box intersection), with a faster coarse mode (`exact-raycast: false`).
+- Admin commands (permission `rpumpkin:command.sightline`, operators by default):
+  - `/sightline toggle <players...>` — enable/disable nametag filtering for players (persisted)
+  - `/sightline exclude add|remove|list <block>` — blocks that never hide nametags (highest priority)
+  - `/sightline include add|remove|list <block>` — blocks that always hide nametags, even transparent ones
+  - `/sightline reload` — reload the configuration
+
+Settings are persisted in `plugins/data/rpumpkin/sightline.json` (created with defaults on first startup):
+
+```json
+{
+  "check-interval-ticks": 10,
+  "max-distance": 64,
+  "hide-when-sneaking": true,
+  "fov-cone-degrees": 0,
+  "exact-raycast": true,
+  "excluded": [],
+  "included": [],
+  "toggled-off-players": []
+}
+```
+
+Priority: `excluded` > `included` > default behavior (full opaque cube). Block IDs accept both `glass` and `minecraft:glass`.
+
+Note: per-viewer hiding relies on the Java-protocol scoreboard, so Bedrock players are not affected.
+
 ## Feature configuration
 
 Each plugin feature (not the plugin itself) can be enabled or disabled via `plugins/data/rpumpkin/config.json`, automatically created with default values on first startup:
@@ -68,7 +99,8 @@ Each plugin feature (not the plugin itself) can be enabled or disabled via `plug
     "chat_rp": true,
     "commandes_rp": true,
     "metier": true,
-    "livres": true
+    "livres": true,
+    "sightline": true
   }
 }
 ```
@@ -80,6 +112,7 @@ Each plugin feature (not the plugin itself) can be enabled or disabled via `plug
 | `commandes_rp` | `/roll`, `/me`, `/do`, `/hrp`, `/rp` commands |
 | `metier` | `/job` command and outfits |
 | `livres` | `/book` command and server books |
+| `sightline` | Nametags visible only with line of sight (`/sightline`) |
 
 A disabled feature registers neither its commands, nor its permissions, nor its handlers — it is completely absent from the server until re-enabled (persisted data such as `sheets.json` is kept). The configuration is read when the plugin starts.
 
@@ -91,6 +124,7 @@ A disabled feature registers neither its commands, nor its permissions, nor its 
 | `rpumpkin:command.rp` | RolePlay commands (roll, me, do, hrp) | Allowed |
 | `rpumpkin:command.job` | Choose your job outfit | Allowed |
 | `rpumpkin:command.book` | Receive a server book | Allowed |
+| `rpumpkin:command.sightline` | Manage nametag visibility (`/sightline`) | Operators |
 
 The plugin also requests permissions to access its data folder (`fs.read.data`, `fs.write.data`).
 
@@ -145,6 +179,7 @@ Place the `target/wasm32-wasip2/release/rpumpkin.wasm` file in the `plugins/` fo
     ├── lib.rs           # full plugin
     ├── books.rs         # configurable books module (written_book_content encoding)
     ├── config.rs        # feature configuration module
+    ├── sightline.rs     # nametag line-of-sight module (per-player scoreboard teams)
     └── skins/           # job outfits module (head/body composite)
 ```
 

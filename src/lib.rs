@@ -2,9 +2,11 @@
 //!
 //! Fournit des fiches de personnage persistantes, un chat RP (HRP/RP),
 //! des commandes RolePlay (/roll, /me, /do, /hrp, /sheet), des tenues
-//! de métier avec conservation de la tête du joueur (/job) et des plaques
-//! de nom visibles uniquement en ligne de vue (/sightline).
+//! de métier avec conservation de la tête du joueur (/job), des plaques
+//! de nom visibles uniquement en ligne de vue (/sightline) et des alias
+//! de commandes configurables (/alias, aliases.json).
 
+pub mod aliases;
 pub mod books;
 pub mod config;
 pub mod sightline;
@@ -51,6 +53,8 @@ struct State {
     books: std::collections::BTreeMap<String, books::Book>,
     /// Paramètres de la fonctionnalité "sightline" (`sightline.json`).
     sightline: sightline::Settings,
+    /// Alias de commandes chargés depuis `<data_folder>/aliases.json`.
+    aliases: std::collections::BTreeMap<String, String>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -65,6 +69,7 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
             plugin_config,
             books: std::collections::BTreeMap::new(),
             sightline: sightline::Settings::default(),
+            aliases: std::collections::BTreeMap::new(),
         });
     }
     f(guard.as_mut().unwrap())
@@ -566,11 +571,13 @@ impl Plugin for RPumpkin {
         let data_folder = context.get_data_folder();
         let plugin_config = config::Config::load(&data_folder);
         let loaded_books = books::load_books(&data_folder);
+        let loaded_aliases = aliases::load_aliases(&data_folder);
         let sightline_path = format!("{}/sightline.json", data_folder);
         with_state(|s| {
             s.data_folder = data_folder;
             s.plugin_config = plugin_config;
             s.books = loaded_books;
+            s.aliases = loaded_aliases;
         });
         load_sheets();
 
@@ -709,6 +716,30 @@ impl Plugin for RPumpkin {
             .then(sightline::list_command("include"))
             .then(CommandNode::literal("reload").execute(sightline::ReloadHandler));
             context.register_command(sightline_cmd, "rpumpkin:command.sightline");
+        }
+
+        if with_config(|c| c.enabled(config::FEATURE_ALIASES)) {
+            context.register_permission(&Permission {
+                node: "rpumpkin:command.alias".into(),
+                description: "Utiliser les alias de commandes".into(),
+                default: PermissionDefault::Allow,
+                children: vec![],
+            })?;
+            context.register_permission(&Permission {
+                node: "rpumpkin:command.alias.admin".into(),
+                description: "Gérer les alias de commandes (/alias)".into(),
+                default: PermissionDefault::Op(PermissionLevel::Four),
+                children: vec![],
+            })?;
+
+            let alias_list = with_state(|s| s.aliases.clone());
+            for (name, target) in &alias_list {
+                context.register_command(
+                    aliases::alias_command(name, target),
+                    "rpumpkin:command.alias",
+                );
+            }
+            context.register_command(aliases::admin_command(), "rpumpkin:command.alias.admin");
         }
 
         Ok(())

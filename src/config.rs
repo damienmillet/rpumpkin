@@ -13,6 +13,7 @@ pub const FEATURE_RP_COMMANDS: &str = "commandes_rp";
 pub const FEATURE_METIER: &str = "metier";
 pub const FEATURE_BOOKS: &str = "livres";
 pub const FEATURE_SIGHTLINE: &str = "sightline";
+pub const FEATURE_ALIASES: &str = "alias";
 
 /// Valeurs par défaut : (id, description, activé).
 pub const FEATURES: &[(&str, &str, bool)] = &[
@@ -40,6 +41,11 @@ pub const FEATURES: &[(&str, &str, bool)] = &[
     (
         FEATURE_SIGHTLINE,
         "Plaques de nom visibles uniquement en ligne de vue (/sightline)",
+        true,
+    ),
+    (
+        FEATURE_ALIASES,
+        "Alias de commandes configurables (/alias, aliases.json)",
         true,
     ),
 ];

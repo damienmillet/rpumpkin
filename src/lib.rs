@@ -1,11 +1,13 @@
 //! RPumpkin — RolePlay unifié pour serveurs Pumpkin.
 //!
 //! Fournit des fiches de personnage persistantes, un chat RP (HRP/RP),
-//! des commandes RolePlay (/roll, /me, /do, /hrp, /sheet) et des tenues
-//! de métier avec conservation de la tête du joueur (/job).
+//! des commandes RolePlay (/roll, /me, /do, /hrp, /sheet), des tenues
+//! de métier avec conservation de la tête du joueur (/job) et des plaques
+//! de nom visibles uniquement en ligne de vue (/sightline).
 
 pub mod books;
 pub mod config;
+pub mod sightline;
 pub mod skins;
 
 use std::collections::HashMap;
@@ -17,7 +19,7 @@ use pumpkin_plugin_api::command::{
 use pumpkin_plugin_api::commands::CommandHandler;
 use pumpkin_plugin_api::events::player::PlayerChatEvent;
 use pumpkin_plugin_api::events::{EventHandler, EventPriority};
-use pumpkin_plugin_api::permission::{Permission, PermissionDefault};
+use pumpkin_plugin_api::permission::{Permission, PermissionDefault, PermissionLevel};
 use pumpkin_plugin_api::permissions::{FS_READ_DATA, FS_WRITE_DATA};
 use pumpkin_plugin_api::text::TextComponent;
 use pumpkin_plugin_api::wit::pumpkin::plugin::data_components::DataComponent;
@@ -47,6 +49,8 @@ struct State {
     plugin_config: config::Config,
     /// Livres chargés depuis `<data_folder>/livres/`.
     books: std::collections::BTreeMap<String, books::Book>,
+    /// Paramètres de la fonctionnalité "sightline" (`sightline.json`).
+    sightline: sightline::Settings,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -60,6 +64,7 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
             data_folder: String::new(),
             plugin_config,
             books: std::collections::BTreeMap::new(),
+            sightline: sightline::Settings::default(),
         });
     }
     f(guard.as_mut().unwrap())
@@ -561,6 +566,7 @@ impl Plugin for RPumpkin {
         let data_folder = context.get_data_folder();
         let plugin_config = config::Config::load(&data_folder);
         let loaded_books = books::load_books(&data_folder);
+        let sightline_path = format!("{}/sightline.json", data_folder);
         with_state(|s| {
             s.data_folder = data_folder;
             s.plugin_config = plugin_config;
@@ -676,11 +682,47 @@ impl Plugin for RPumpkin {
             context.register_command(livre, "rpumpkin:command.book");
         }
 
+        if with_config(|c| c.enabled(config::FEATURE_SIGHTLINE)) {
+            let sightline_settings = sightline::Settings::load(&sightline_path);
+            with_state(|s| s.sightline = sightline_settings);
+
+            context.register_permission(&Permission {
+                node: "rpumpkin:command.sightline".into(),
+                description: "Gérer la visibilité des plaques de nom (/sightline)".into(),
+                default: PermissionDefault::Op(PermissionLevel::Four),
+                children: vec![],
+            })?;
+            context.register_event_handler(sightline::TickHandler, EventPriority::Normal, true)?;
+            context.register_event_handler(sightline::LeaveHandler, EventPriority::Normal, true)?;
+
+            let sightline_cmd = Command::new(
+                &["sightline".to_string()],
+                "Gérer la visibilité des plaques de nom (ligne de vue)",
+            )
+            .then(
+                CommandNode::literal("toggle").then(
+                    CommandNode::argument("players", &ArgumentType::Players)
+                        .execute(sightline::ToggleHandler),
+                ),
+            )
+            .then(sightline::list_command("exclude"))
+            .then(sightline::list_command("include"))
+            .then(CommandNode::literal("reload").execute(sightline::ReloadHandler));
+            context.register_command(sightline_cmd, "rpumpkin:command.sightline");
+        }
+
         Ok(())
     }
 
-    fn on_unload(&self, _context: Context) -> pumpkin_plugin_api::Result<()> {
+    fn on_unload(&self, context: Context) -> pumpkin_plugin_api::Result<()> {
         save_sheets()?;
+        if with_config(|c| c.enabled(config::FEATURE_SIGHTLINE)) {
+            for player in context.get_server().get_all_players() {
+                if let Some(java) = player.as_java() {
+                    java.reset_scoreboard();
+                }
+            }
+        }
         Ok(())
     }
 }

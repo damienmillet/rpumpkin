@@ -28,3 +28,27 @@ jobs:
 
       - name: Vérifier le binaire WASM
         run: test -f target/wasm32-wasip2/release/rpumpkin.wasm
+
+  compat:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pumpkin_tag: ["0.2.2+26.3-26.60", "0.2.1+26.3-26.51"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Épingler pumpkin-plugin-api sur ${{ matrix.pumpkin_tag }}
+        run: sed -i "s|tag = \"[^\"]*\"|tag = \"${{ matrix.pumpkin_tag }}\"|" Cargo.toml
+
+      - name: Build (wasm32-wasip2) contre Pumpkin ${{ matrix.pumpkin_tag }}
+        run: cargo build --release
+
+      - name: Vérifier le binaire WASM
+        run: test -f target/wasm32-wasip2/release/rpumpkin.wasm

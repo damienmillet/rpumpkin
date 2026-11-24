@@ -161,11 +161,13 @@ The plugin is compiled to WebAssembly (`wasm32-wasip2`): a single `rpumpkin.wasm
 
 ### Pumpkin server compatibility
 
-The plugin is built against the Pumpkin `0.2.1+26.3-26.51` plugin API (v0.1 WIT ABI). Because the 0.2.1 server changed some v0.1 event records, a plugin built against the old 0.2.0 API no longer loads on a 0.2.1 server (`ApiMismatch`); this build fixes that. Once `pumpkin-plugin-api 0.2.1` is published on crates.io, the git dependency in `Cargo.toml` can be switched back to a version requirement.
+The plugin is built against the Pumpkin `0.2.2+26.3-26.60` plugin API and stays loadable on both supported server releases: `0.2.1+26.3-26.51` and `0.2.2+26.3-26.60`.
+
+It uses the v0.1 WIT ABI (`pumpkin:plugin@0.1.0`), which is byte-identical between those two Pumpkin releases, so the compiled component exports `pumpkin:plugin/metadata@0.1.0` and both servers route it to their isolated v0.1 plugin host — no `ApiMismatch`. The CI builds the WASM against both tags on every push/PR (`.github/workflows/ci.yml`, `compat` job), and the extracted component interface of the two builds is identical. Warning: a plugin built against the 0.2.0 API no longer loads on 0.2.1+ servers, because the 0.2.1 server changed some v0.1 event records. Once `pumpkin-plugin-api 0.2.2` is published on crates.io, the git dependency in `Cargo.toml` can be switched back to a version requirement.
 
 ## CI / GitHub Release
 
-- `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build.
+- `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build, plus a `compat` matrix job that builds the WASM against each supported Pumpkin tag (`0.2.2+26.3-26.60`, `0.2.1+26.3-26.51`).
 - `.github/workflows/release.yml` — on a `vX.Y.Z` tag: build, create a GitHub release with `rpumpkin.wasm` attached, then publish to the Pumpkin Market.
 
 To publish a new version:

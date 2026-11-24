@@ -88,6 +88,29 @@ Priority: `excluded` > `included` > default behavior (full opaque cube). Block I
 
 Note: per-viewer hiding relies on the Java-protocol scoreboard, so Bedrock players are not affected.
 
+### Command aliases (`alias`)
+
+Linux-style command aliases, stored in a server-side config file: `plugins/data/rpumpkin/aliases.json` (created empty on first startup):
+
+```json
+{
+  "aliases": {
+    "salut": "me salutes everyone",
+    "home": "tp @s 0 64 0"
+  }
+}
+```
+
+Each key becomes an in-game command `/<key>`. Any arguments typed after the alias are appended to the target command: `/home extra` runs `tp @s 0 64 0 extra`. The target runs through the server command dispatcher **as the original sender**, so the target command's own permissions still apply (no privilege escalation). Recursive aliases are capped at 16 levels.
+
+Alias commands are registered when the plugin loads, so a **new name** added to the file becomes usable after a server restart; the target of an **existing** alias is looked up on every execution, so editing it (or `/alias reload`) takes effect immediately. Names are lowercased and cannot contain spaces, a leading `/`, or collide with the plugin's own commands (`sheet`, `roll`, `me`, `do`, `hrp`, `rp`, `job`, `book`, `sightline`, `alias`).
+
+Admin commands (permission `rpumpkin:command.alias.admin`, operators by default):
+- `/alias` or `/alias list` — list aliases and their targets
+- `/alias add <name> <command...>` — create/replace an alias (persisted to `aliases.json`)
+- `/alias remove <name>` — delete an alias (persisted)
+- `/alias reload` — reload `aliases.json` from disk
+
 ## Feature configuration
 
 Each plugin feature (not the plugin itself) can be enabled or disabled via `plugins/data/rpumpkin/config.json`, automatically created with default values on first startup:
@@ -100,7 +123,8 @@ Each plugin feature (not the plugin itself) can be enabled or disabled via `plug
     "commandes_rp": true,
     "metier": true,
     "livres": true,
-    "sightline": true
+    "sightline": true,
+    "alias": true
   }
 }
 ```
@@ -113,6 +137,7 @@ Each plugin feature (not the plugin itself) can be enabled or disabled via `plug
 | `metier` | `/job` command and outfits |
 | `livres` | `/book` command and server books |
 | `sightline` | Nametags visible only with line of sight (`/sightline`) |
+| `alias` | Configurable command aliases (`aliases.json`, `/alias`) |
 
 A disabled feature registers neither its commands, nor its permissions, nor its handlers — it is completely absent from the server until re-enabled (persisted data such as `sheets.json` is kept). The configuration is read when the plugin starts.
 
@@ -125,6 +150,8 @@ A disabled feature registers neither its commands, nor its permissions, nor its 
 | `rpumpkin:command.job` | Choose your job outfit | Allowed |
 | `rpumpkin:command.book` | Receive a server book | Allowed |
 | `rpumpkin:command.sightline` | Manage nametag visibility (`/sightline`) | Operators |
+| `rpumpkin:command.alias` | Use command aliases | Allowed |
+| `rpumpkin:command.alias.admin` | Manage command aliases (`/alias`) | Operators |
 
 The plugin also requests permissions to access its data folder (`fs.read.data`, `fs.write.data`).
 
@@ -177,6 +204,7 @@ Place the `target/wasm32-wasip2/release/rpumpkin.wasm` file in the `plugins/` fo
 ├── skins/               # outfit generator + test outfits (b64)
 └── src/
     ├── lib.rs           # full plugin
+    ├── aliases.rs       # command aliases module (aliases.json, /alias)
     ├── books.rs         # configurable books module (written_book_content encoding)
     ├── config.rs        # feature configuration module
     ├── sightline.rs     # nametag line-of-sight module (per-player scoreboard teams)

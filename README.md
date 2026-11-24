@@ -1,5 +1,11 @@
 # RPumpkin
 
+<!-- rpumpkin-version: 0.0.4 -->
+
+[![version](https://img.shields.io/github/v/tag/damienmillet/rpumpkin?label=version)](https://github.com/damienmillet/rpumpkin/releases)
+[![CI](https://github.com/damienmillet/rpumpkin/actions/workflows/ci.yml/badge.svg)](https://github.com/damienmillet/rpumpkin/actions/workflows/ci.yml)
+[![release](https://github.com/damienmillet/rpumpkin/actions/workflows/release.yml/badge.svg)](https://github.com/damienmillet/rpumpkin/actions/workflows/release.yml)
+
 **RPumpkin** is a unified solution to add Minecraft RolePlay features to a [Pumpkin](https://github.com/Pumpkin-MC/Pumpkin) server.
 
 It is a Pumpkin plugin (WebAssembly, written in Rust) that bundles the essential RolePlay building blocks: persistent character sheets, formatted RP chat, and RolePlay action commands.
@@ -165,27 +171,61 @@ The plugin is built against the Pumpkin `0.2.2+26.3-26.60` plugin API and stays 
 
 It uses the v0.1 WIT ABI (`pumpkin:plugin@0.1.0`), which is byte-identical between those two Pumpkin releases, so the compiled component exports `pumpkin:plugin/metadata@0.1.0` and both servers route it to their isolated v0.1 plugin host — no `ApiMismatch`. The CI builds the WASM against both tags on every push/PR (`.github/workflows/ci.yml`, `compat` job), and the extracted component interface of the two builds is identical. Warning: a plugin built against the 0.2.0 API no longer loads on 0.2.1+ servers, because the 0.2.1 server changed some v0.1 event records. Once `pumpkin-plugin-api 0.2.2` is published on crates.io, the git dependency in `Cargo.toml` can be switched back to a version requirement.
 
-## CI / GitHub Release
+## CI & release pipeline
 
-- `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build, plus a `compat` matrix job that builds the WASM against each supported Pumpkin tag (`0.2.2+26.3-26.60`, `0.2.1+26.3-26.51`).
-- `.github/workflows/release.yml` — on a `vX.Y.Z` tag: build, create a GitHub release with `rpumpkin.wasm` attached, then publish to the Pumpkin Market.
+The whole publication flow is automated with three workflows:
 
-To publish a new version:
+| Step | Workflow | Trigger |
+|------|----------|---------|
+| PR validation | `.github/workflows/ci.yml` | every push / PR on `main` |
+| Version bump | `.github/workflows/version.yml` | manual — `Actions > Version > Run workflow` |
+| Release + Market publish | `.github/workflows/release.yml` | every `v*` tag (pushed automatically by the Version workflow) |
+
+### 1. PR validation (`ci.yml`)
+
+On every PR and push to `main`:
+
+- `check` job: `cargo fmt --check`, `cargo clippy --release -- -D warnings`, WASM build (`wasm32-wasip2`) + binary check.
+- `compat` job (matrix): builds the WASM against each supported Pumpkin tag (`0.2.2+26.3-26.60`, `0.2.1+26.3-26.51`).
+- `labels` job (PR only): the PR must carry at least one type label (`bug`, `enhancement`, `documentation`, `release`, `ci`, `chore`).
+- `docs` job: the `<!-- rpumpkin-version: ... -->` marker in `README.md` must match the `version` in `Cargo.toml`.
+
+Pull requests start from `.github/PULL_REQUEST_TEMPLATE.md`; merging to `main` requires the CI to be green (branch protection).
+
+### 2. Version bump (`version.yml`)
+
+Run it manually: `Actions > Version > Run workflow`, then choose `bump` (patch/minor/major), `track` (stable/alpha/beta) and optional custom `notes`. It:
+
+1. computes the next version from `Cargo.toml` and refuses to run if the tag already exists (no double release),
+2. updates `Cargo.toml`, the `rpumpkin-version` marker in `README.md`, and prepends a new section to `CHANGELOG.md` (generated from the commits since the last tag, or from `notes`),
+3. commits (`Version X.Y.Z`), creates the tag `vX.Y.Z` (suffixed `-alpha` / `-beta` for pre-releases) and pushes both to `main` — which triggers the Release workflow.
+
+Note: this workflow pushes directly to `main`; if branch protection forbids direct pushes from the Actions bot, allow the `github-actions` bot on `main`.
+
+### 3. Release (`release.yml`)
+
+On a `v*` tag (or manually via `workflow_dispatch` with `version` / `track` / `force`):
+
+1. checks that the tag version matches `Cargo.toml` (fails otherwise),
+2. builds `rpumpkin.wasm` and archives it as a workflow artifact,
+3. creates the GitHub release with the WASM attached and auto-generated notes (`prerelease` for alpha/beta tracks, `make_latest` for stable),
+4. updates the plugin documentation on the Pumpkin Market (`market/description.md` + `README.md`; best-effort — the step only warns if the Market API endpoint differs),
+5. publishes the version to the Pumpkin Market (`PUT /api/plugins/157`; the track is derived from the tag suffix, `stable` by default), skipping the upload if the version is already published unless `force=true`.
+
+### Publishing to the Pumpkin Market
+
+Prerequisites (first time only):
+
+1. Create a "rpumpkin" plugin entry on [market.pumpkinmc.org](https://market.pumpkinmc.org).
+2. Generate a Market API token with the `plugins:update` and `plugins:versions:upload` scopes.
+3. Add it as the `PUMPKIN_MARKET_TOKEN` secret in `Settings > Secrets and variables > Actions`.
+
+To publish a new version, just run the `Version` workflow — no manual `git tag` needed. To publish by hand (or re-publish an existing version):
 
 ```bash
 git tag v0.1.1
 git push origin v0.1.1
 ```
-
-### Publishing to the Pumpkin Market
-
-Market publishing is done by the `publish-to-pumpkin-market` action (from [filiphsps/pumpkin-plugins](https://github.com/filiphsps/pumpkin-plugins)). Prerequisites:
-
-1. Create a "rpumpkin" plugin entry on [market.pumpkinmc.org](https://market.pumpkinmc.org) (first time only).
-2. Generate a Market API token with the `plugins:update` and `plugins:versions:upload` scopes.
-3. Add it as the `PUMPKIN_MARKET_TOKEN` secret in `Settings > Secrets and variables > Actions`.
-
-For each pushed tag, the version is then published automatically to the Market (`stable` track), in addition to the GitHub release.
 
 ## Build
 

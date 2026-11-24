@@ -1,0 +1,1 @@
+RPumpkin adds RolePlay building blocks to a Pumpkin server: persistent character sheets, formatted RP chat, RP action commands (/roll, /me, /do, /hrp, /rp), job outfits, server-side configurable books, nametags visible only with line of sight, and configurable command aliases. Single rpumpkin.wasm runs on every architecture supported by the Pumpkin server.

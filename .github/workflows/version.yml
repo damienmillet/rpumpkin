@@ -1,0 +1,102 @@
+name: Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Type de bump SemVer"
+        required: true
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+      track:
+        description: "Track de publication (le tag reçoit un suffixe -alpha / -beta si ce n'est pas stable)"
+        required: true
+        type: choice
+        default: stable
+        options: [stable, alpha, beta]
+      notes:
+        description: "Notes de release personnalisées (markdown, optionnel — sinon le changelog est généré depuis les commits)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Calculer la nouvelle version
+        id: calc
+        run: |
+          CURRENT=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+          NEW="$MAJOR.$MINOR.$PATCH"
+          TRACK="${{ inputs.track }}"
+          if [ "$TRACK" = "stable" ]; then
+            TAG="v$NEW"
+          else
+            TAG="v$NEW-$TRACK"
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "track=$TRACK" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Nouvelle version : $NEW (tag $TAG, track $TRACK)"
+
+      - name: Refuser si le tag existe déjà
+        run: |
+          if git ls-remote --exit-code --tags origin "${{ steps.calc.outputs.tag }}" >/dev/null; then
+            echo "::error::Le tag ${{ steps.calc.outputs.tag }} existe déjà — aucune publication (évite un double release)."
+            exit 1
+          fi
+
+      - name: Mettre à jour Cargo.toml, README.md et CHANGELOG.md
+        run: |
+          VERSION="${{ steps.calc.outputs.version }}"
+          TAG="${{ steps.calc.outputs.tag }}"
+          sed -i "0,/^version = \".*\"/s//version = \"$VERSION\"/" Cargo.toml
+          sed -i "s|^<!-- rpumpkin-version: .* -->$|<!-- rpumpkin-version: $VERSION -->|" README.md
+
+          DATE=$(date +%Y-%m-%d)
+          PREV_TAG=$(git tag --sort=-v:refname | head -1)
+          if [ -n "${{ inputs.notes }}" ]; then
+            BODY="${{ inputs.notes }}"
+          elif [ -n "$PREV_TAG" ]; then
+            BODY=$(git log --no-merges --format='- %s' "$PREV_TAG..HEAD")
+          else
+            BODY=$(git log --no-merges --format='- %s')
+          fi
+          SECTION=$(printf '## [%s] - %s\n\n%s' "$TAG" "$DATE" "$BODY")
+          if [ -f CHANGELOG.md ]; then
+            awk -v sec="$SECTION" 'BEGIN{printed=0} /^## \[/ && !printed {print sec; print ""; printed=1} {print}' CHANGELOG.md > /tmp/CHANGELOG.md
+            mv /tmp/CHANGELOG.md CHANGELOG.md
+          else
+            printf '# Changelog\n\n%s\n\n' "$SECTION" > CHANGELOG.md
+          fi
+          git diff --stat
+
+      - name: Commit, tag et push (déclenche le workflow Release)
+        run: |
+          git config user.name "damienmillet"
+          git config user.email "contact@damien-millet.dev"
+          git add Cargo.toml README.md CHANGELOG.md
+          git commit -m "Version ${{ steps.calc.outputs.version }}"
+          git tag "${{ steps.calc.outputs.tag }}"
+          git push origin HEAD:main
+          git push origin "${{ steps.calc.outputs.tag }}"

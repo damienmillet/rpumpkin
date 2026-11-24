@@ -3,15 +3,38 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, sans le 'v' (ex: 0.0.5) — doit correspondre à Cargo.toml"
+        required: true
+        type: string
+      track:
+        description: "Track de publication"
+        required: true
+        type: choice
+        default: stable
+        options: [stable, alpha, beta]
+      force:
+        description: "Republier sur le Market même si la version y existe déjà"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -19,25 +42,97 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Résoudre version, track et tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+            T="${{ inputs.track }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            V="${TAG#v}"
+            case "$TAG" in
+              *-alpha) T="alpha" ;;
+              *-beta)  T="beta" ;;
+              *)       T="stable" ;;
+            esac
+          fi
+          V_PURE="${V%%-*}"
+          if [ "$T" = "stable" ]; then TAG_NAME="v$V_PURE"; else TAG_NAME="v$V_PURE-$T"; fi
+          echo "version=$V_PURE" >> "$GITHUB_OUTPUT"
+          echo "track=$T" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Vérifier la cohérence version / Cargo.toml
+        run: |
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "Tag: ${{ steps.meta.outputs.tag_name }} / Cargo.toml: $CARGO_VERSION"
+          if [ "$CARGO_VERSION" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "::error::La version du tag (${{ steps.meta.outputs.version }}) ne correspond pas à Cargo.toml ($CARGO_VERSION)."
+            exit 1
+          fi
+
       - name: Build (wasm32-wasip2)
         run: cargo build --release
 
       - name: Vérifier le binaire WASM
         run: test -f target/wasm32-wasip2/release/rpumpkin.wasm
 
-      - name: Extraire la version du tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Archiver le WASM
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpumpkin-${{ steps.meta.outputs.version }}.wasm
+          path: target/wasm32-wasip2/release/rpumpkin.wasm
 
       - name: Créer la release GitHub
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: ${{ steps.meta.outputs.tag_name }}
           files: target/wasm32-wasip2/release/rpumpkin.wasm
           generate_release_notes: true
+          prerelease: ${{ steps.meta.outputs.track != 'stable' }}
+          make_latest: ${{ steps.meta.outputs.track == 'stable' }}
+
+      - name: Mettre à jour la documentation sur le Pumpkin Market
+        env:
+          MARKET_TOKEN: ${{ secrets.PUMPKIN_MARKET_TOKEN }}
+        run: |
+          SHORT=""
+          if [ -f market/description.md ]; then SHORT=$(cat market/description.md); fi
+          jq -n --arg d "$SHORT" --arg l "$(cat README.md)" '{description: $d, long_description: $l}' > /tmp/market-doc.json
+          curl --fail-with-body -sS -X PATCH "https://market.pumpkinmc.org/api/plugins/157" \
+            -H "Authorization: Bearer $MARKET_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/market-doc.json \
+            || echo "::warning::La mise à jour de la doc Market a échoué (endpoint/champs à confirmer selon l'API du Market) — la publication de la version continue."
 
       - name: Publier sur le Pumpkin Market
+        env:
+          MARKET_TOKEN: ${{ secrets.PUMPKIN_MARKET_TOKEN }}
         run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          TRACK="${{ steps.meta.outputs.track }}"
+          FORCE="false"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then FORCE="true"; fi
+          EXISTS=$(curl -sS -H "Authorization: Bearer $MARKET_TOKEN" \
+            "https://market.pumpkinmc.org/api/plugins/157/versions" \
+            | jq -r --arg v "$VERSION" '[.[]? | select(.version == $v or .name == $v)] | length' 2>/dev/null || echo 0)
+          if [ "$EXISTS" -gt 0 ] && [ "$FORCE" != "true" ]; then
+            echo "::notice::La version $VERSION est déjà publiée sur le Market — publication sautée (relancez avec force=true pour écraser)."
+            exit 0
+          fi
           curl --fail-with-body -sS -X PUT "https://market.pumpkinmc.org/api/plugins/157" \
-            -H "Authorization: Bearer ${{ secrets.PUMPKIN_MARKET_TOKEN }}" \
+            -H "Authorization: Bearer $MARKET_TOKEN" \
             -F "wasm=@target/wasm32-wasip2/release/rpumpkin.wasm;type=application/wasm" \
-            -F "metadata={\"version\":\"${{ steps.version.outputs.version }}\",\"track\":\"alpha\"}"
+            -F "metadata={\"version\":\"$VERSION\",\"track\":\"$TRACK\"}"
+
+      - name: Résumé
+        run: |
+          {
+            echo "## Release ${{ steps.meta.outputs.tag_name }}"
+            echo ""
+            echo "- Version : ${{ steps.meta.outputs.version }}"
+            echo "- Track : ${{ steps.meta.outputs.track }}"
+            echo "- WASM : $(stat -c%s target/wasm32-wasip2/release/rpumpkin.wasm) octets"
+          } >> "$GITHUB_STEP_SUMMARY"

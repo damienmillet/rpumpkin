@@ -168,14 +168,10 @@ It uses the v0.1 WIT ABI (`pumpkin:plugin@0.1.0`), which is byte-identical betwe
 ## CI / GitHub Release
 
 - `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build, plus a `compat` matrix job that builds the WASM against each supported Pumpkin tag (`0.2.2+26.3-26.60`, `0.2.1+26.3-26.51`).
-- `.github/workflows/release.yml` — on a `vX.Y.Z` tag: build, create a GitHub release with `rpumpkin.wasm` attached, then publish to the Pumpkin Market.
+- `.github/workflows/auto-release.yml` — on every push to `main`: reads `version` from `Cargo.toml`, and if the GitHub release `v<version>` does not exist yet, builds the WASM, creates the tag + GitHub release with `rpumpkin.wasm` attached, and publishes to the Pumpkin Market. Idempotent: pushes to `main` that don't change the version (or whose version is already released) are skipped.
+- `.github/workflows/release.yml` — manual fallback, on a pushed `vX.Y.Z` tag: build, GitHub release, Pumpkin Market.
 
-To publish a new version:
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
+To publish a new version, no tag to push: bump `version` in `Cargo.toml` in a PR, merge it to `main` — the release is created automatically.
 
 ### Publishing to the Pumpkin Market
 
@@ -185,7 +181,7 @@ Market publishing is done by the `publish-to-pumpkin-market` action (from [filip
 2. Generate a Market API token with the `plugins:update` and `plugins:versions:upload` scopes.
 3. Add it as the `PUMPKIN_MARKET_TOKEN` secret in `Settings > Secrets and variables > Actions`.
 
-For each pushed tag, the version is then published automatically to the Market (`stable` track), in addition to the GitHub release.
+For each new version released on `main`, the version is then published automatically to the Market (`alpha` track), in addition to the GitHub release.
 
 ## Build
 

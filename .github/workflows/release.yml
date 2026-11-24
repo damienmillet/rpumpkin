@@ -2,10 +2,15 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -13,31 +18,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Résoudre la version et décider si une release est nécessaire
+        id: check
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "do_release=true" >> "$GITHUB_OUTPUT"
+          else
+            V=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+            if gh release view "v$V" >/dev/null 2>&1; then
+              echo "do_release=false" >> "$GITHUB_OUTPUT"
+              echo "La release v$V existe déjà, rien à faire."
+            else
+              echo "do_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.check.outputs.do_release == 'true'
         with:
           targets: wasm32-wasip2
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.check.outputs.do_release == 'true'
 
       - name: Build (wasm32-wasip2)
+        if: steps.check.outputs.do_release == 'true'
         run: cargo build --release
 
       - name: Vérifier le binaire WASM
+        if: steps.check.outputs.do_release == 'true'
         run: test -f target/wasm32-wasip2/release/rpumpkin.wasm
 
-      - name: Extraire la version du tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Créer la release GitHub
+      - name: Créer le tag + la release GitHub
+        if: steps.check.outputs.do_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.check.outputs.version }}
           files: target/wasm32-wasip2/release/rpumpkin.wasm
           generate_release_notes: true
 
       - name: Publier sur le Pumpkin Market
+        if: steps.check.outputs.do_release == 'true'
         run: |
           curl --fail-with-body -sS -X PUT "https://market.pumpkinmc.org/api/plugins/157" \
             -H "Authorization: Bearer ${{ secrets.PUMPKIN_MARKET_TOKEN }}" \
             -F "wasm=@target/wasm32-wasip2/release/rpumpkin.wasm;type=application/wasm" \
-            -F "metadata={\"version\":\"${{ steps.version.outputs.version }}\",\"track\":\"alpha\"}"
+            -F "metadata={\"version\":\"${{ steps.check.outputs.version }}\",\"track\":\"alpha\"}"

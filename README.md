@@ -168,8 +168,7 @@ It uses the v0.1 WIT ABI (`pumpkin:plugin@0.1.0`), which is byte-identical betwe
 ## CI / GitHub Release
 
 - `.github/workflows/ci.yml` — on every push/PR: `cargo fmt --check`, `cargo clippy -D warnings`, WASM build, plus a `compat` matrix job that builds the WASM against each supported Pumpkin tag (`0.2.2+26.3-26.60`, `0.2.1+26.3-26.51`).
-- `.github/workflows/auto-release.yml` — on every push to `main`: reads `version` from `Cargo.toml`, and if the GitHub release `v<version>` does not exist yet, builds the WASM, creates the tag + GitHub release with `rpumpkin.wasm` attached, and publishes to the Pumpkin Market. Idempotent: pushes to `main` that don't change the version (or whose version is already released) are skipped.
-- `.github/workflows/release.yml` — manual fallback, on a pushed `vX.Y.Z` tag: build, GitHub release, Pumpkin Market.
+- `.github/workflows/release.yml` — the single release pipeline, triggered on every push to `main` and on every `vX.Y.Z` tag push. On a push to `main` it reads `version` from `Cargo.toml` and releases only if the GitHub release `v<version>` does not exist yet (idempotent: merges without a version bump do nothing); on a tag push it always releases. Steps: WASM build, tag + GitHub release with `rpumpkin.wasm` attached, publish to the Pumpkin Market.
 
 To publish a new version, no tag to push: bump `version` in `Cargo.toml` in a PR, merge it to `main` — the release is created automatically.
 

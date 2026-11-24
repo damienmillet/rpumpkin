@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -52,3 +56,44 @@ jobs:
 
       - name: Vérifier le binaire WASM
         run: test -f target/wasm32-wasip2/release/rpumpkin.wasm
+
+  labels:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la présence d'un label de type
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LABELS=$(gh pr view "${{ github.event.pull_request.number }}" --json labels --jq '[.labels[].name] | join(",")')
+          echo "Labels de la PR : $LABELS"
+          FOUND=0
+          IFS=',' read -ra ARR <<< "$LABELS"
+          for l in "${ARR[@]}"; do
+            case "$l" in
+              bug|enhancement|documentation|release|ci|chore) FOUND=1 ;;
+            esac
+          done
+          if [ "$FOUND" -ne 1 ]; then
+            echo "::error::Ajoutez au moins un label de type à la PR : bug, enhancement, documentation, release, ci ou chore."
+            exit 1
+          fi
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cohérence version README / Cargo.toml
+        run: |
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          README_VERSION=$(sed -n 's|^<!-- rpumpkin-version: \(.*\) -->$|\1|p' README.md | head -1)
+          echo "Cargo.toml: $CARGO_VERSION / README: $README_VERSION"
+          if [ -z "$README_VERSION" ]; then
+            echo "::error::Balise <!-- rpumpkin-version: ... --> manquante dans README.md."
+            exit 1
+          fi
+          if [ "$CARGO_VERSION" != "$README_VERSION" ]; then
+            echo "::error::La balise rpumpkin-version du README.md ($README_VERSION) ne correspond pas à la version de Cargo.toml ($CARGO_VERSION). Lancez le workflow 'Version' pour synchroniser les deux."
+            exit 1
+          fi
